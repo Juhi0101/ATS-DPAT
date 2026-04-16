@@ -9,7 +9,7 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
-
+import os
 
 # ------------------------------
 # LOAD LISTS
@@ -23,8 +23,10 @@ def load_list(filepath):
         return [line.strip().lower() for line in f if line.strip()]
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-SKILLS_FILE = "_data/skills.txt"
+BASE_DIR = os.path.dirname(os.path.abspath(__name__))
+SRC_DIR= os.path.join(BASE_DIR, "src")
+DATA_DIR = os.path.join(SRC_DIR, "_data")   
+SKILLS_FILE = os.path.join(DATA_DIR, "skills.txt")
 SKILLS = load_list(SKILLS_FILE)
 
 # STOPWORDS_FILE = BASE_DIR / "data" / "stopwords.txt"
