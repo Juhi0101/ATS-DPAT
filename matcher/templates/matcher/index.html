@@ -157,7 +157,7 @@
                 <div>
                     <p class="text-sm uppercase tracking-[0.4em] text-slate-400">Resume Job Matcher</p>
                     <h1 class="mt-3 text-4xl font-semibold tracking-tight text-white sm:text-5xl">Match your resume to the job description</h1>
-                    <p class="mt-4 max-w-2xl text-slate-300">Paste your resume and job description below, then tap analyze to see skill, keyword, and fit insights instantly.</p>
+                    <p class="mt-4 max-w-2xl text-slate-300">Upload your file (.txt or .pdf) or paste your text below, then tap analyze to see skill, keyword, and fit insights instantly.</p>
                 </div>
             </div>
 
@@ -168,7 +168,7 @@
                         <span class="text-slate-500">Required</span>
                     </div>
                     <div class="space-y-3">
-                        <input id="resumeFile" type="file" accept=".txt" class="w-full rounded-3xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-slate-100 shadow-md shadow-slate-950/20 file:mr-4 file:rounded-full file:border-0 file:bg-cyan-500 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-950 file:transition file:duration-200 file:hover:bg-cyan-400" />
+                        <input id="resumeFile" type="file" accept=".txt,.pdf" class="w-full rounded-3xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-slate-100 shadow-md shadow-slate-950/20 file:mr-4 file:rounded-full file:border-0 file:bg-cyan-500 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-950 file:transition file:duration-200 file:hover:bg-cyan-400" />
                         <textarea id="resumeText" rows="10" class="w-full rounded-3xl border border-slate-700 bg-slate-950/80 px-4 py-4 text-slate-100 shadow-md shadow-slate-950/20 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20" placeholder="Paste resume or profile summary here..."></textarea>
                     </div>
                 </label>
@@ -178,7 +178,7 @@
                         <span class="text-slate-500">Required</span>
                     </div>
                     <div class="space-y-3">
-                        <input id="jobFile" type="file" accept=".txt" class="w-full rounded-3xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-slate-100 shadow-md shadow-slate-950/20 file:mr-4 file:rounded-full file:border-0 file:bg-cyan-500 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-950 file:transition file:duration-200 file:hover:bg-cyan-400" />
+                        <input id="jobFile" type="file" accept=".txt,.pdf" class="w-full rounded-3xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-slate-100 shadow-md shadow-slate-950/20 file:mr-4 file:rounded-full file:border-0 file:bg-cyan-500 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-950 file:transition file:duration-200 file:hover:bg-cyan-400" />
                         <textarea id="jobText" rows="10" class="w-full rounded-3xl border border-slate-700 bg-slate-950/80 px-4 py-4 text-slate-100 shadow-md shadow-slate-950/20 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20" placeholder="Paste the job description here..."></textarea>
                     </div>
                 </label>
@@ -253,7 +253,22 @@
         const spinner = document.getElementById('spinner');
         const resumeFileInput = document.getElementById('resumeFile');
         const jobFileInput = document.getElementById('jobFile');
+        let resumeFileData = null;
+        let resumeFileName = '';
+        let jobFileData = null;
+        let jobFileName = '';
+
         const trailCanvas = document.getElementById('trailCanvas');
+
+        const encodeArrayBufferToBase64 = async (arrayBuffer) => {
+            const bytes = new Uint8Array(arrayBuffer);
+            const chunkSize = 0x8000;
+            let binary = '';
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+            }
+            return btoa(binary);
+        };
         const trailCtx = trailCanvas ? trailCanvas.getContext('2d') : null;
         const trailParticles = [];
 
@@ -325,16 +340,34 @@
             resumeFileInput.addEventListener('change', async (event) => {
                 const file = event.target.files && event.target.files[0];
                 if (!file) return;
-                if (file.type !== 'text/plain' && !file.name.toLowerCase().endsWith('.txt')) {
-                    statusMessage.textContent = 'Please upload a .txt file only.';
+                const fileName = file.name.toLowerCase();
+                const isTxt = file.type === 'text/plain' || fileName.endsWith('.txt');
+                const isPdf = file.type === 'application/pdf' || fileName.endsWith('.pdf');
+
+                if (!isTxt && !isPdf) {
+                    statusMessage.textContent = 'Please upload a .txt or .pdf file.';
                     statusMessage.classList.remove('text-slate-400');
                     statusMessage.classList.add('text-rose-400');
                     resumeFileInput.value = '';
+                    resumeFileData = null;
+                    resumeFileName = '';
                     return;
                 }
-                const text = await file.text();
-                document.getElementById('resumeText').value = text;
-                statusMessage.textContent = `Loaded ${file.name}. You can edit or submit manually.`;
+
+                if (isPdf) {
+                    const arrayBuffer = await file.arrayBuffer();
+                    resumeFileData = await encodeArrayBufferToBase64(arrayBuffer);
+                    resumeFileName = file.name;
+                    document.getElementById('resumeText').value = '';
+                    statusMessage.textContent = `Loaded ${file.name}. Click analyze to parse the PDF.`;
+                } else {
+                    const text = await file.text();
+                    resumeFileData = null;
+                    resumeFileName = '';
+                    document.getElementById('resumeText').value = text;
+                    statusMessage.textContent = `Loaded ${file.name}. You can edit or submit manually.`;
+                }
+
                 statusMessage.classList.remove('text-rose-400');
                 statusMessage.classList.add('text-slate-400');
             });
@@ -344,16 +377,34 @@
             jobFileInput.addEventListener('change', async (event) => {
                 const file = event.target.files && event.target.files[0];
                 if (!file) return;
-                if (file.type !== 'text/plain' && !file.name.toLowerCase().endsWith('.txt')) {
-                    statusMessage.textContent = 'Please upload a .txt file only.';
+                const fileName = file.name.toLowerCase();
+                const isTxt = file.type === 'text/plain' || fileName.endsWith('.txt');
+                const isPdf = file.type === 'application/pdf' || fileName.endsWith('.pdf');
+
+                if (!isTxt && !isPdf) {
+                    statusMessage.textContent = 'Please upload a .txt or .pdf file.';
                     statusMessage.classList.remove('text-slate-400');
                     statusMessage.classList.add('text-rose-400');
                     jobFileInput.value = '';
+                    jobFileData = null;
+                    jobFileName = '';
                     return;
                 }
-                const text = await file.text();
-                document.getElementById('jobText').value = text;
-                statusMessage.textContent = `Loaded ${file.name}. You can edit or submit manually.`;
+
+                if (isPdf) {
+                    const arrayBuffer = await file.arrayBuffer();
+                    jobFileData = await encodeArrayBufferToBase64(arrayBuffer);
+                    jobFileName = file.name;
+                    document.getElementById('jobText').value = '';
+                    statusMessage.textContent = `Loaded ${file.name}. Click analyze to parse the PDF.`;
+                } else {
+                    const text = await file.text();
+                    jobFileData = null;
+                    jobFileName = '';
+                    document.getElementById('jobText').value = text;
+                    statusMessage.textContent = `Loaded ${file.name}. You can edit or submit manually.`;
+                }
+
                 statusMessage.classList.remove('text-rose-400');
                 statusMessage.classList.add('text-slate-400');
             });
@@ -385,9 +436,11 @@
         analyzeBtn.addEventListener('click', async () => {
             const resumeText = document.getElementById('resumeText').value.trim();
             const jobText = document.getElementById('jobText').value.trim();
+            const hasResumeContent = Boolean(resumeText || (resumeFileData && resumeFileName));
+            const hasJobContent = Boolean(jobText || (jobFileData && jobFileName));
 
-            if (!resumeText || !jobText) {
-                statusMessage.textContent = 'Both resume and job description are required.';
+            if (!hasResumeContent || !hasJobContent) {
+                statusMessage.textContent = 'Both resume and job description are required, either by paste or file upload.';
                 statusMessage.classList.remove('text-slate-400');
                 statusMessage.classList.add('text-rose-400');
                 return;
@@ -399,15 +452,26 @@
             setLoading(true);
 
             try {
+                const requestBody = {
+                    resume_text: resumeText,
+                    job_description: jobText,
+                };
+
+                if (resumeFileData && resumeFileName) {
+                    requestBody.resume_file_name = resumeFileName;
+                    requestBody.resume_file_base64 = resumeFileData;
+                }
+                if (jobFileData && jobFileName) {
+                    requestBody.job_file_name = jobFileName;
+                    requestBody.job_file_base64 = jobFileData;
+                }
+
                 const response = await fetch('/analyze/', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        resume_text: resumeText,
-                        job_description: jobText,
-                    }),
+                    body: JSON.stringify(requestBody),
                 });
 
                 if (!response.ok) {

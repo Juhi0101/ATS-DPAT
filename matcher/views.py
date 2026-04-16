@@ -1,14 +1,53 @@
+import base64
+import io
 import json
 import logging
+from pathlib import Path
 
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
+from PyPDF2 import PdfReader
+
 from src.similarity import ats_match
 
 logger = logging.getLogger(__name__)
+
+ALLOWED_UPLOAD_EXTENSIONS = {'.txt', '.pdf'}
+
+
+def extract_text_from_pdf(file_bytes):
+    try:
+        with io.BytesIO(file_bytes) as stream:
+            reader = PdfReader(stream)
+            text_parts = []
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text_parts.append(page_text)
+        return '\n'.join(text_parts)
+    except Exception as e:
+        logger.exception('Error extracting text from PDF: %s', e)
+        raise
+
+
+def parse_uploaded_file(file_name, file_base64):
+    if not file_name or not file_base64:
+        return ''
+
+    extension = Path(file_name).suffix.lower()
+    if extension not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise ValueError('Unsupported file type.')
+
+    file_bytes = base64.b64decode(file_base64)
+    if extension == '.txt':
+        return file_bytes.decode('utf-8', errors='replace')
+    if extension == '.pdf':
+        return extract_text_from_pdf(file_bytes)
+
+    raise ValueError('Unsupported file type.')
 
 
 def home(request):
@@ -26,16 +65,41 @@ def ats_test(request):
 @csrf_exempt
 @require_POST
 def analyze_resume(request):
-    if request.content_type == 'application/json':
+    resume_text = ''
+    job_description = ''
+    resume_file_name = ''
+    resume_file_base64 = ''
+    job_file_name = ''
+    job_file_base64 = ''
+
+    if request.content_type and request.content_type.startswith('application/json'):
         try:
             payload = json.loads(request.body.decode('utf-8'))
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON payload.'}, status=400)
         resume_text = payload.get('resume_text', '')
         job_description = payload.get('job_description', '')
+        resume_file_name = payload.get('resume_file_name', '')
+        resume_file_base64 = payload.get('resume_file_base64', '')
+        job_file_name = payload.get('job_file_name', '')
+        job_file_base64 = payload.get('job_file_base64', '')
     else:
         resume_text = request.POST.get('resume_text', '')
         job_description = request.POST.get('job_description', '')
+        resume_file_name = request.POST.get('resume_file_name', '')
+        resume_file_base64 = request.POST.get('resume_file_base64', '')
+        job_file_name = request.POST.get('job_file_name', '')
+        job_file_base64 = request.POST.get('job_file_base64', '')
+
+    try:
+        if resume_file_name and resume_file_base64:
+            resume_text = parse_uploaded_file(resume_file_name, resume_file_base64)
+        if job_file_name and job_file_base64:
+            job_description = parse_uploaded_file(job_file_name, job_file_base64)
+    except ValueError as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+    except Exception:
+        return JsonResponse({'error': 'Unable to parse uploaded file. Please upload a valid TXT or PDF document.'}, status=400)
 
     if not resume_text or not job_description:
         return JsonResponse(
