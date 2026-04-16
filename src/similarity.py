@@ -24,7 +24,7 @@ def load_list(filepath):
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SKILLS_FILE = BASE_DIR / "data" / "skills.txt"
+SKILLS_FILE = "_data/skills.txt"
 SKILLS = load_list(SKILLS_FILE)
 
 # STOPWORDS_FILE = BASE_DIR / "data" / "stopwords.txt"
